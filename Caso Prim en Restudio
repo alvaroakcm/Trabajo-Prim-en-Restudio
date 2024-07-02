@@ -1,0 +1,172 @@
+#Algoritmo de PRIM de arbol de expansion
+install.packages("igraph")
+install.packages("leaflet")
+
+
+#Cargar librerias
+library(igraph)
+library(leaflet)
+library(rpart)
+library(rpart.plot)
+library(ggplot2)
+
+dat <- data.frame(
+  Ciudades = c("Lima", "Arequipa", "Trujillo", "Chiclayo", "Piura", "Cusco", "Iquitos", "Huancayo", "Chimbote", "Tacna", 
+               "Pucallpa", "Juliaca", "Ica", "Huaraz", "Tarapoto", "Ayacucho", "Cajamarca", "Puno", "Tumbes", "Moquegua",
+               "Chincha Alta", "Huánuco", "Huacho", "Cerro de Pasco", "Chachapoyas", "Puerto Maldonado", "Moyobamba",
+               "Huaral", "Jaén", "Chulucanas", "Sullana", "Barranca", "Abancay", "Yurimaguas", "Sicuani", "Tarma",
+               "Mollendo", "Ayaviri", "Satipo", "Paita"),
+  
+  Latitud = c(-12.0464, -16.409, -8.109, -6.7714, -5.1945, -13.5319, -3.7491, -12.0651, -9.0853, -18.0118, -8.3791, 
+              -15.4997, -14.0678, -9.5273, -6.4819, -13.1587, -7.1638, -15.8402, -3.5669, -17.195, -13.419, -9.9306, 
+              -11.1065, -10.6874, -6.2318, -12.6033, -6.0322, -11.4955, -5.7089, -5.0892, -4.9039, -10.7516, -13.6345,
+              -5.8981, -14.2694, -11.4192, -17.195, -17.0253, -11.2522, -5.0892
+  ),
+  
+  Longitud = c(-77.0428, -71.5375, -79.0247, -79.8383, -80.6328, -71.9675, -73.2538, -75.2049, -78.5783, -70.2536,-74.5539,
+               -70.1323, -75.7286, -77.5283, -76.3647, -74.2239, -78.5003, -70.0219, -80.4511, -70.935, -76.132, -76.2422,
+               -77.6109, -76.2564, -77.8692, -69.1833, -76.9747, -77.2077, -78.8045, -80.6858, -77.2067, -77.7534, -72.2564,
+               -76.1139, -71.2264, -75.6903, -72.0139, -70.5886, -74.6386, -81.1142
+  ),
+  poblaciones = c(9877000, 1385000, 917000, 703000, 615000, 420000, 469000, 558000, 413000, 302000, 299000,
+                  289000, 285000, 146000, 150000, 160000, 221000, 150000, 118000, 63000, 220000, 183000, 
+                  160000, 70000, 32000, 124000, 55000, 100000, 86000, 105000, 180000, 65000, 62000, 
+                  71000, 44000, 60000, 63000, 43000, 92000, 46000)
+)
+
+
+----
+  View(dat)
+# Crear el mapa con Leaflet
+map <- leaflet(dat) %>%
+  addTiles() %>%
+  setView(lng = -75.68723, lat = 4.39158, zoom = 5) %>%
+  addMarkers(
+    data = dat,
+    lat = ~Latitud,
+    lng = ~Longitud,
+    label = ~Ciudades,
+    popup = ~paste("Población:", poblaciones)
+  )
+
+map
+
+# Función para calcular la distancia haversine
+haversine <- function(lat1, lon1, lat2, lon2) {
+  R <- 6371  # Radio de la Tierra en kilómetros
+  delta_lat <- (lat2 - lat1) * pi / 180
+  delta_lon <- (lon2 - lon1) * pi / 180
+  a <- sin(delta_lat / 2) * sin(delta_lat / 2) +
+    cos(lat1 * pi / 180) * cos(lat2 * pi / 180) * 
+    sin(delta_lon / 2) * sin(delta_lon / 2)
+  c <- 2 * atan2(sqrt(a), sqrt(1 - a))
+  d <- R * c
+  return(d)
+}
+
+# Calcular las distancias entre todas las ubicaciones
+n <- nrow(dat)
+distancias <- matrix(NA, nrow = n, ncol = n)
+rownames(distancias) <- dat$Ciudades
+colnames(distancias) <- dat$Ciudades
+
+for (i in 1:n) {
+  for (j in 1:n) {
+    distancias[i, j] <- haversine(dat$Latitud[i], dat$Longitud[i], dat$Latitud[j], dat$Longitud[j])
+  }
+}
+
+# Redondear las distancias a un solo decimal
+distancias <- round(distancias, 1)
+
+# Ver la matriz de distancias en kilómetros
+print(distancias)
+
+# Crear el grafo con igraph
+grafo <- graph_from_adjacency_matrix(distancias, mode = "undirected", weighted = TRUE, diag = FALSE)
+
+# Encontrar el MST utilizando el algoritmo de Prim
+Mst_prim <- mst(grafo, algorithm = "prim")
+
+# Calcular la suma de todos los pesos de las aristas en el MST
+suma_pesos <- sum(E(Mst_prim)$weight)
+
+# Mostrar la suma de los pesos
+print(paste("Suma de los km de las aristas en el MST:", suma_pesos))
+
+# Plotear el MST
+plot(
+  Mst_prim, 
+  layout = layout_with_fr(Mst_prim, niter = 100, grid = "nogrid"),  # Utilizar el layout de Fruchterman-Reingold
+  vertex.label = V(grafo)$name, 
+  vertex.size = 5,  # Tamaño de los vértices
+  vertex.label.cex = 0.8,  # Tamaño de la etiqueta de los vértices
+  edge.label = round(E(Mst_prim)$weight, 1), 
+  edge.label.cex = 1.2,  # Tamaño de las etiquetas de las aristas
+  edge.width = 2,  # Grosor de las aristas
+  edge.label.color = "red"  # Color de las etiquetas de las aristas
+)
+
+
+# Crear una matriz de distancias basada en las diferencias absolutas de población
+# Calcular la diferencia de poblaciones entre todas las ubicaciones
+n <- nrow(dat)
+diferencias_poblacion <- matrix(NA, nrow = n, ncol = n)
+rownames(diferencias_poblacion) <- dat$Ciudades
+colnames(diferencias_poblacion) <- dat$Ciudades
+
+for (i in 1:n) {
+  for (j in 1:n) {
+    if (i <= nrow(dat) && j <= nrow(dat) && !is.na(dat$poblaciones[i]) && !is.na(dat$poblaciones[j])) {
+      diferencias_poblacion[i, j] <- abs(dat$poblaciones[i] - dat$poblaciones[j])
+    }
+  }
+}
+
+# Ver la matriz de diferencias de población
+print(diferencias_poblacion)
+
+# Crear el grafo con igraph usando la diferencia de población
+grafo2 <- graph_from_adjacency_matrix(diferencias_poblacion, mode = "undirected", weighted = TRUE, diag = FALSE)
+
+# Encontrar el MST utilizando el algoritmo de Prim
+Mst_prim <- mst(grafo2, algorithm = "prim")
+
+# Calcular la suma de todos los pesos de las aristas en el MST
+suma_pesos <- sum(E(Mst_prim)$weight)
+
+# Mostrar la suma de los pesos
+print(paste("Suma de la diferencia de poblacion de las aristas en el MST:", suma_pesos))
+
+
+# Plotear el MST
+plot(
+  Mst_prim, 
+  layout = layout_with_fr(Mst_prim, niter = 100, grid = "nogrid"),
+  vertex.label = V(grafo)$name,
+  vertex.size = 5,
+  vertex.label.cex = 0.8,
+  edge.label = round(E(Mst_prim)$weight, 1),  # Mostrar los pesos con un decimal
+  edge.label.cex = 1.2,
+  edge.width = 2,
+  edge.label.color = "blue",
+  main = "Árbol de Expansión Mínima con Diferencias de Población"
+)
+
+# Guardar la imagen del grafo en un archivo PNG
+png(filename = "MST_Diferencia_Poblacion.png", width = 800, height = 600)
+plot(
+  Mst_prim, 
+  layout = layout_with_fr(Mst_prim, niter = 10000, grid = "nogrid"),
+  vertex.label = V(grafo)$name,
+  vertex.size = 20,
+  vertex.label.cex = 0.8,
+  edge.label = round(E(Mst_prim)$weight, 1),  # Mostrar los pesos con un decimal
+  edge.label.cex = 1.2,
+  edge.width = 2,
+  edge.label.color = "blue",
+  main = "Árbol de Expansión Mínima con Diferencias de Población"
+)
+dev.off()
+
+
